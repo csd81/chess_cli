@@ -1,0 +1,2 @@
+# Chess CLI dependencies
+textual>=1.0.0

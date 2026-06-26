@@ -1,0 +1,216 @@
+/* Chess TUI Stylesheet */
+
+Screen {
+    background: #1a1a2e;
+}
+
+#board-container {
+    align: center middle;
+    padding: 1 2;
+}
+
+#board-labels {
+    width: 46;
+    height: 1;
+    color: #8888aa;
+    text-align: center;
+}
+
+#board-grid {
+    grid-size: 8 8;
+    grid-gutter: 0;
+    width: 40;
+    height: 24;
+}
+
+Square {
+    width: 5;
+    height: 3;
+    content-align: center middle;
+    border: none;
+    padding: 0;
+    min-width: 5;
+    min-height: 3;
+}
+
+Square.light {
+    background: #f0d9b5;
+    color: #000000;
+}
+
+Square.dark {
+    background: #b58863;
+    color: #ffffff;
+}
+
+Square.light.selected {
+    background: #f6f669;
+}
+
+Square.dark.selected {
+    background: #d4d43c;
+}
+
+Square.light.legal-target {
+    background: #7fc97f;
+}
+
+Square.dark.legal-target {
+    background: #5a9e5a;
+}
+
+Square.light.last-move {
+    background: #f5f0c0;
+}
+
+Square.dark.last-move {
+    background: #c8b880;
+}
+
+Square.light.check {
+    background: #ff7777 !important;
+}
+
+Square.dark.check {
+    background: #cc4444 !important;
+}
+
+#sidebar {
+    width: 32;
+    padding: 1 1;
+}
+
+#status {
+    height: 7;
+    border: solid #444466;
+    padding: 1 2;
+    background: #16213e;
+    color: #cccccc;
+}
+
+#status Label {
+    width: 1fr;
+}
+
+#move-log {
+    height: 1fr;
+    border: solid #444466;
+    padding: 1 2;
+    margin-top: 1;
+    background: #16213e;
+    color: #cccccc;
+    overflow-y: auto;
+}
+
+#input-bar {
+    padding: 1 2;
+    height: 5;
+}
+
+#move-input {
+    width: 20;
+    margin-right: 1;
+}
+
+#send-btn {
+    width: 10;
+}
+
+.header {
+    background: #0f3460;
+    color: #ffffff;
+    text-style: bold;
+    padding: 1 2;
+    height: 3;
+}
+
+.footer {
+    background: #0f3460;
+    color: #8888aa;
+    padding: 1 2;
+    height: 3;
+}
+
+#cpu-label {
+    color: #ffaa00;
+    text-style: italic;
+}
+
+/* Modal dialogs */
+ModeScreen {
+    align: center middle;
+}
+
+#mode-grid {
+    grid-size: 3;
+    grid-gutter: 1;
+    width: 40;
+    height: 12;
+    padding: 1;
+    background: #16213e;
+    border: thick #444466;
+}
+
+#mode-grid Label {
+    column-span: 3;
+    content-align: center middle;
+    height: 3;
+    text-style: bold;
+    color: #ffffff;
+}
+
+#mode-grid Button {
+    height: 3;
+}
+
+/* Promotion dialog */
+PromotionDialog {
+    align: center middle;
+}
+
+#promo-grid {
+    grid-size: 4;
+    grid-gutter: 1;
+    width: 40;
+    height: 8;
+    padding: 1;
+    background: #16213e;
+    border: thick #444466;
+}
+
+/* Save dialog */
+SaveDialog {
+    align: center middle;
+}
+
+#save-grid {
+    grid-size: 2;
+    grid-gutter: 1;
+    width: 40;
+    height: 12;
+    padding: 1;
+    background: #16213e;
+    border: thick #444466;
+}
+
+#save-grid Label {
+    column-span: 2;
+    content-align: center middle;
+    height: 3;
+    text-style: bold;
+    color: #ffffff;
+}
+
+#save-grid .title {
+    column-span: 2;
+}
+
+/* Notification */
+#notification {
+    dock: top;
+    height: 3;
+    background: #e94560;
+    color: #ffffff;
+    text-align: center;
+    padding: 1;
+}
