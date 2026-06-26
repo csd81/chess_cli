@@ -48,7 +48,11 @@ class Square(Static):
 
     def set_piece(self, piece: Optional[Piece]) -> None:
         if piece:
-            self.update(str(piece))
+            # Use Rich markup to ensure piece color is always visible
+            # regardless of the square's CSS color property.
+            # White pieces -> dark foreground, black pieces -> light foreground.
+            fg = "#000000" if piece.color == Color.WHITE else "#ffffff"
+            self.update(f"[{fg}]{piece}[/]")
         else:
             self.update("")
 
