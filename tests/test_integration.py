@@ -201,3 +201,37 @@ class TestAIVsAI:
             assert not cli.game.game_over, "Game should not be over in 3 moves"
 
         assert len(cli.game.move_history) == 6
+
+
+class TestOpeningBook:
+    def test_book_returns_starting_move(self):
+        """AI should play a book move (e4/d4/c4/Nf3) from the starting position."""
+        from chess_cli.opening_book import OPENING_BOOK, get_book_move
+        from chess_cli.moves import generate_legal_moves
+
+        b = Board()
+        legal = generate_legal_moves(b, Color.WHITE)
+        move = get_book_move(b, Color.WHITE, None, legal)
+        assert move is not None, "Should find a book move from starting position"
+        assert move.uci() in OPENING_BOOK[
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"
+        ], f"Move {move.uci()} should be in the opening book for the starting position"
+
+    def test_book_responds_to_e4(self):
+        """After 1.e4, AI as Black should respond with a book move (e5/c5/e6/etc.)."""
+        from chess_cli.opening_book import OPENING_BOOK, get_book_move
+        from chess_cli.moves import generate_legal_moves, algebraic_to_pos
+
+        g = Game()
+        g.make_move(algebraic_to_pos("e2"), algebraic_to_pos("e4"))
+
+        legal = generate_legal_moves(g.board, Color.BLACK,
+                                     en_passant_target=g.en_passant_target)
+        move = get_book_move(g.board, Color.BLACK,
+                             g.en_passant_target, legal)
+        assert move is not None, "Should find a book response to 1.e4"
+        assert move.piece.color == Color.BLACK
+        # Verify the move is in the 1.e4 responses list
+        e4_key = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3"
+        assert move.uci() in OPENING_BOOK[e4_key], \
+            f"Move {move.uci()} should be a valid response to 1.e4"

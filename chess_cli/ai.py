@@ -242,6 +242,12 @@ def get_best_move(board: Board, current_turn: Color,
     if not legal:
         return None
 
+    # Check opening book first (instant response)
+    from chess_cli.opening_book import get_book_move
+    book_move = get_book_move(board, current_turn, en_passant_target, legal)
+    if book_move is not None:
+        return book_move
+
     # If only one legal move, return it immediately
     if len(legal) == 1:
         return legal[0]
