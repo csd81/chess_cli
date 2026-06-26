@@ -344,3 +344,12 @@ async def test_notification_after_illegal_click(app):
             assert n is not None
         except Exception:
             pytest.skip("Notification already removed")
+# AI vs AI
+@pytest.mark.asyncio
+async def test_aivai_mode_selection(app):
+    """Selecting AI vs AI mode sets ai_vs_ai flag."""
+    async with app.run_test() as pilot:
+        await pilot.click("#aivai")
+        await pilot.pause(0.1)
+        assert app.ai_vs_ai is True
+        assert app.cpu_color is None

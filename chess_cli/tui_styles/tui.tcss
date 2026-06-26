@@ -142,9 +142,9 @@ ModeScreen {
 }
 
 #mode-grid {
-    grid-size: 3;
+    grid-size: 2;
     grid-gutter: 1;
-    width: 40;
+    width: 44;
     height: 12;
     padding: 1;
     background: #16213e;
@@ -152,7 +152,7 @@ ModeScreen {
 }
 
 #mode-grid Label {
-    column-span: 3;
+    column-span: 2;
     content-align: center middle;
     height: 3;
     text-style: bold;

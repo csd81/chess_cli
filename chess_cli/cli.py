@@ -13,13 +13,16 @@ from chess_cli.ai import get_best_move
 class ChessCLI:
     """Command-line interface for playing chess."""
 
-    MODES = {1: "Player vs Player", 2: "Player vs CPU", 3: "CPU vs Player"}
+    MODES = {1: "Player vs Player", 2: "Player vs CPU", 3: "CPU vs Player", 4: "AI vs AI"}
 
     def __init__(self) -> None:
         self.game = Game()
         self.highlighted_squares: list = []
         self.highlighted_piece: Optional[str] = None
         self.cpu_color: Optional[Color] = None
+        self.ai_vs_ai = False
+        self.ai_depth_white = 3
+        self.ai_depth_black = 3
         self._select_mode()
 
     def _select_mode(self) -> None:
@@ -31,10 +34,11 @@ class ChessCLI:
         print("  1. Player vs Player")
         print("  2. Player vs CPU (play as White)")
         print("  3. CPU vs Player (play as Black)")
+        print("  4. AI vs AI (Spectator)")
         print()
         while True:
             try:
-                choice = input("Enter choice (1-3): ").strip()
+                choice = input("Enter choice (1-4): ").strip()
                 if choice == "1":
                     self.cpu_color = None
                     break
@@ -44,7 +48,11 @@ class ChessCLI:
                 elif choice == "3":
                     self.cpu_color = Color.WHITE
                     break
-                print("Invalid choice. Enter 1, 2, or 3.")
+                elif choice == "4":
+                    self.cpu_color = None
+                    self.ai_vs_ai = True
+                    break
+                print("Invalid choice. Enter 1, 2, 3, or 4.")
             except (EOFError, KeyboardInterrupt):
                 print()
                 print("Goodbye!")
@@ -58,7 +66,9 @@ class ChessCLI:
         """Display the current board state."""
         self.clear_screen()
         mode_name = self.MODES.get(
-            1 if self.cpu_color is None else (2 if self.cpu_color == Color.BLACK else 3),
+            4 if self.ai_vs_ai else (
+                1 if self.cpu_color is None else (2 if self.cpu_color == Color.BLACK else 3)
+            ),
             "?"
         )
         print(f"=== CHESS CLI [{mode_name}] ===")
@@ -217,36 +227,71 @@ class ChessCLI:
         print("Press Enter to continue...")
         input()
 
+    def _run_ai_move(self) -> bool:
+        """Compute and execute one AI move. Returns False if no legal move."""
+        depth = self.ai_depth_white if self.game.current_turn == Color.WHITE else self.ai_depth_black
+        if self.ai_vs_ai:
+            delay = 1.0
+            label = "AI White" if self.game.current_turn == Color.WHITE else "AI Black"
+        else:
+            delay = 0.5
+            label = "CPU"
+        time.sleep(delay)
+        move = get_best_move(
+            self.game.board, self.game.current_turn,
+            en_passant_target=self.game.en_passant_target,
+            depth=depth,
+        )
+        if move:
+            notation = self.game.get_move_notation(move)
+            print(f"{label} plays: {notation} ({move.uci()})")
+            self.game.make_move_from_move(move)
+            self.highlighted_squares = []
+            self.highlighted_piece = None
+            return True
+        else:
+            print(f"{label} has no legal moves!")
+            return False
+
+    def _auto_save_pgn(self) -> None:
+        """Auto-save PGN for AI vs AI games."""
+        if not self.game.move_history:
+            return
+        from datetime import datetime
+        fname = f"ai_vs_ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pgn"
+        pgn = self.game.export_pgn(white_name="AI White", black_name="AI Black")
+        try:
+            with open(fname, "w") as f:
+                f.write(pgn)
+            print(f"Game saved to {fname}")
+        except OSError as e:
+            print(f"Error saving file: {e}")
+
     def run(self) -> None:
         """Main game loop."""
         while not self.game.game_over:
-            # CPU turn: auto-compute and play
-            if self.cpu_color is not None and self.game.current_turn == self.cpu_color:
+            # AI turn: auto-compute and play
+            is_ai_turn = self.ai_vs_ai or (
+                self.cpu_color is not None and self.game.current_turn == self.cpu_color
+            )
+            if is_ai_turn:
                 self.display()
-                print("CPU is thinking...")
-                print()
-                time.sleep(0.5)
-                move = get_best_move(
-                    self.game.board, self.game.current_turn,
-                    en_passant_target=self.game.en_passant_target,
-                    depth=3
-                )
-                if move:
-                    notation = self.game.get_move_notation(move)
-                    print(f"CPU plays: {notation} ({move.uci()})")
-                    self.game.make_move_from_move(move)
-                    self.highlighted_squares = []
-                    self.highlighted_piece = None
-                    if self.game.game_over:
-                        continue
-                    print("Press Enter to continue...")
-                    input()
-                    continue
+                if self.ai_vs_ai:
+                    label = "AI White" if self.game.current_turn == Color.WHITE else "AI Black"
+                    print(f"{label} is thinking...")
                 else:
-                    print("CPU has no legal moves!")
+                    print("CPU is thinking...")
+                print()
+                ok = self._run_ai_move()
+                if not ok:
+                    input("Press Enter to continue...")
+                    break
+                if self.game.game_over:
+                    continue
+                if not self.ai_vs_ai:
                     print("Press Enter to continue...")
                     input()
-                    break
+                continue
 
             # Human turn
             self.display()
@@ -293,7 +338,10 @@ class ChessCLI:
                 input()
         self.display()
         print()
-        self._prompt_save_pgn()
+        if self.ai_vs_ai:
+            self._auto_save_pgn()
+        else:
+            self._prompt_save_pgn()
         print("Press Enter to exit...")
         input()
 

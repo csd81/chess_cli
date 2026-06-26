@@ -66,11 +66,12 @@ class ModeScreen(ModalScreen[int]):
             Button("Player vs Player", variant="primary", id="pvp"),
             Button("Player vs CPU (play White)", id="pvcpu"),
             Button("CPU vs Player (play Black)", id="cpuvp"),
+            Button("AI vs AI (Spectator)", id="aivai"),
             id="mode-grid",
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        mapping = {"pvp": 1, "pvcpu": 2, "cpuvp": 3}
+        mapping = {"pvp": 1, "pvcpu": 2, "cpuvp": 3, "aivai": 4}
         choice = mapping.get(event.button.id, 1)
         self.dismiss(choice)
 
@@ -190,6 +191,7 @@ class ChessApp(App):
         super().__init__()
         self.game = Game()
         self.cpu_color: Optional[Color] = None
+        self.ai_vs_ai = False
         self.selected_pos: Optional[Position] = None
         self.legal_targets: List[Position] = []
         self._pending_promotion: Optional[Tuple[Position, Position]] = None
@@ -224,21 +226,29 @@ class ChessApp(App):
         self.push_screen(ModeScreen(), self._on_mode_selected)
 
     def _on_mode_selected(self, choice: int) -> None:
+        self.ai_vs_ai = False
         if choice == 1:
             self.cpu_color = None
         elif choice == 2:
             self.cpu_color = Color.BLACK
-        else:
+        elif choice == 3:
             self.cpu_color = Color.WHITE
+        else:
+            self.cpu_color = None
+            self.ai_vs_ai = True
 
         mode_names = {None: "PvP", Color.BLACK: "PvCPU", Color.WHITE: "CPUvP"}
-        mode_name = mode_names.get(self.cpu_color, "?")
+        if self.ai_vs_ai:
+            mode_name = "AI vs AI"
+        else:
+            mode_name = mode_names.get(self.cpu_color, "?")
         title = self.query_one("#title-bar", Static)
         title.update(f"Chess TUI  [{mode_name}]")
 
         self.refresh_board()
         self._update_status()
         self._maybe_run_cpu()
+        self._maybe_run_ai_vs_ai()
 
     def refresh_board(self) -> None:
         board = self.game.board
@@ -319,6 +329,11 @@ class ChessApp(App):
                 and self.game.current_turn == self.cpu_color):
             self._run_cpu_move()
 
+    def _maybe_run_ai_vs_ai(self) -> None:
+        """In AI vs AI mode, trigger a worker for the current turn."""
+        if self.ai_vs_ai and not self.game.game_over:
+            self._run_ai_vs_ai_move()
+
     @work(thread=True, exclusive=True)
     def _run_cpu_move(self) -> None:
         self._cpu_thinking = True
@@ -342,6 +357,30 @@ class ChessApp(App):
             self._update_status()
             if not self.game.game_over:
                 self._maybe_run_cpu()
+                self._maybe_run_ai_vs_ai()
+        else:
+            self._update_status()
+
+    @work(thread=True, exclusive=True)
+    def _run_ai_vs_ai_move(self) -> None:
+        """Worker for AI vs AI: compute one move with delay and recurse."""
+        import time
+        time.sleep(0.8)
+        move = get_best_move(
+            self.game.board, self.game.current_turn,
+            en_passant_target=self.game.en_passant_target,
+            depth=3,
+        )
+        self.call_from_thread(self._on_ai_vs_ai_move_done, move)
+
+    def _on_ai_vs_ai_move_done(self, move: Optional[Move]) -> None:
+        if move:
+            self.game.make_move_from_move(move)
+            self._reset_selection()
+            self.refresh_board()
+            self._update_status()
+            if not self.game.game_over:
+                self._maybe_run_ai_vs_ai()
         else:
             self._update_status()
 
@@ -391,6 +430,7 @@ class ChessApp(App):
                     self.refresh_board()
                     self._update_status()
                     self._maybe_run_cpu()
+                    self._maybe_run_ai_vs_ai()
                 else:
                     self._reset_selection()
                     self.refresh_board()
@@ -421,6 +461,7 @@ class ChessApp(App):
                 self.refresh_board()
                 self._update_status()
                 self._maybe_run_cpu()
+                self._maybe_run_ai_vs_ai()
                 return
 
         self._reset_selection()
@@ -492,6 +533,7 @@ class ChessApp(App):
                 self.refresh_board()
                 self._update_status()
                 self._maybe_run_cpu()
+                self._maybe_run_ai_vs_ai()
                 input_widget.value = ""
                 return
 
@@ -506,7 +548,7 @@ class ChessApp(App):
         if self._cpu_thinking:
             return
         if self.game.undo_move():
-            if self.cpu_color is not None:
+            if self.cpu_color is not None or self.ai_vs_ai:
                 self.game.undo_move()
             self._reset_selection()
             self.refresh_board()

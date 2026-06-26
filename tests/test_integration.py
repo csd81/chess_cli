@@ -178,3 +178,26 @@ class TestAIIntegration:
         assert len(g.move_history) > 0
         assert g.game_over or len(g.move_history) == max_moves
         assert g.winner in (Color.WHITE, Color.BLACK, None)
+
+
+class TestAIVsAI:
+    def test_cli_ai_vs_ai_auto_plays(self):
+        """ChessCLI with ai_vs_ai=True auto-plays moves for both sides."""
+        from chess_cli.cli import ChessCLI
+        cli = ChessCLI.__new__(ChessCLI)
+        # Minimal init to avoid stdin prompt
+        cli.game = Game()
+        cli.highlighted_squares = []
+        cli.highlighted_piece = None
+        cli.cpu_color = None
+        cli.ai_vs_ai = True
+        cli.ai_depth_white = 2
+        cli.ai_depth_black = 2
+
+        # Play 3 full moves (6 half-moves)
+        for _ in range(6):
+            ok = cli._run_ai_move()
+            assert ok, "AI should have a legal move"
+            assert not cli.game.game_over, "Game should not be over in 3 moves"
+
+        assert len(cli.game.move_history) == 6
