@@ -5,9 +5,15 @@ import sys
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Chess CLI/TUI")
+    parser = argparse.ArgumentParser(description="Chess CLI/TUI/Web")
     parser.add_argument("--tui", "-t", action="store_true",
                         help="Launch the Textual TUI (default: classic CLI)")
+    parser.add_argument("--web", "-w", action="store_true",
+                        help="Launch the FastAPI web server")
+    parser.add_argument("--host", type=str, default="127.0.0.1",
+                        help="Web server host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8000,
+                        help="Web server port (default: 8000)")
     args = parser.parse_args()
 
     if args.tui:
@@ -16,6 +22,13 @@ def main() -> None:
             run_tui()
         except ImportError as e:
             print(f"Error: TUI mode requires 'textual' library. {e}", file=sys.stderr)
+            sys.exit(1)
+    elif args.web:
+        try:
+            from web.server import run_server
+            run_server(host=args.host, port=args.port)
+        except ImportError as e:
+            print(f"Error: Web mode requires 'fastapi' and 'uvicorn'. {e}", file=sys.stderr)
             sys.exit(1)
     else:
         from chess_cli.cli import main as cli_main

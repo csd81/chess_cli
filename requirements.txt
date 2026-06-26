@@ -1,2 +1,6 @@
 # Chess CLI dependencies
 textual>=1.0.0
+
+# Web server (optional, for --web mode)
+fastapi>=0.104.0
+uvicorn>=0.24.0
