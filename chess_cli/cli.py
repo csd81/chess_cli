@@ -13,17 +13,23 @@ from chess_cli.ai import get_best_move
 class ChessCLI:
     """Command-line interface for playing chess."""
 
-    MODES = {1: "Player vs Player", 2: "Player vs CPU", 3: "CPU vs Player", 4: "AI vs AI"}
+    MODES = {1: "Player vs Player", 2: "Player vs CPU", 3: "CPU vs Player", 4: "AI vs AI", 5: "Load FEN / Puzzle Mode"}
 
-    def __init__(self) -> None:
-        self.game = Game()
+    def __init__(self, fen: str = None) -> None:
+        self.game = Game(fen=fen)
         self.highlighted_squares: list = []
         self.highlighted_piece: Optional[str] = None
         self.cpu_color: Optional[Color] = None
         self.ai_vs_ai = False
         self.ai_depth_white = 3
         self.ai_depth_black = 3
-        self._select_mode()
+        self._fen_mode = fen is not None
+        if fen is None:
+            self._select_mode()
+        else:
+            print(f"Loaded FEN position. Mode: Puzzle / Analysis")
+            print("Press Enter to continue...")
+            input()
 
     def _select_mode(self) -> None:
         """Prompt the user to select game mode at startup."""
@@ -35,10 +41,11 @@ class ChessCLI:
         print("  2. Player vs CPU (play as White)")
         print("  3. CPU vs Player (play as Black)")
         print("  4. AI vs AI (Spectator)")
+        print("  5. Load FEN / Puzzle Mode")
         print()
         while True:
             try:
-                choice = input("Enter choice (1-4): ").strip()
+                choice = input("Enter choice (1-5): ").strip()
                 if choice == "1":
                     self.cpu_color = None
                     break
@@ -52,7 +59,21 @@ class ChessCLI:
                     self.cpu_color = None
                     self.ai_vs_ai = True
                     break
-                print("Invalid choice. Enter 1, 2, 3, or 4.")
+                elif choice == "5":
+                    fen_str = input("Paste FEN string: ").strip()
+                    if fen_str:
+                        try:
+                            self.game = Game(fen=fen_str)
+                            self._fen_mode = True
+                            print("FEN position loaded. Press Enter to continue...")
+                            input()
+                        except Exception as e:
+                            print(f"Error parsing FEN: {e}")
+                            print("Press Enter to try again...")
+                            input()
+                            continue
+                    break
+                print("Invalid choice. Enter 1, 2, 3, 4, or 5.")
             except (EOFError, KeyboardInterrupt):
                 print()
                 print("Goodbye!")
@@ -65,7 +86,7 @@ class ChessCLI:
     def display(self) -> None:
         """Display the current board state."""
         self.clear_screen()
-        mode_name = self.MODES.get(
+        mode_name = "Puzzle Mode" if getattr(self, "_fen_mode", False) else self.MODES.get(
             4 if self.ai_vs_ai else (
                 1 if self.cpu_color is None else (2 if self.cpu_color == Color.BLACK else 3)
             ),
@@ -346,9 +367,9 @@ class ChessCLI:
         input()
 
 
-def main() -> None:
+def main(fen: str = None) -> None:
     """Entry point for the chess CLI."""
-    cli = ChessCLI()
+    cli = ChessCLI(fen=fen)
     cli.run()
 
 

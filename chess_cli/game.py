@@ -14,7 +14,14 @@ from chess_cli.moves import (
 class Game:
     """Represents a complete chess game with move history and state."""
 
-    def __init__(self) -> None:
+    def __init__(self, fen: str = None) -> None:
+        if fen:
+            self._init_from_fen(fen)
+        else:
+            self._init_standard()
+
+    def _init_standard(self) -> None:
+        """Initialize from the standard starting position."""
         self.board = Board()
         self.current_turn: Color = Color.WHITE
         self.move_history: List[Move] = []
@@ -31,6 +38,100 @@ class Game:
             Color.WHITE: {"kingside": True, "queenside": True},
             Color.BLACK: {"kingside": True, "queenside": True},
         }
+
+    def _init_from_fen(self, fen: str) -> None:
+        """Initialize from a FEN string."""
+        parts = fen.split()
+        self.board = Board.from_fen(parts[0])
+        self.current_turn = Color.WHITE if len(parts) > 1 and parts[1] == 'w' else Color.BLACK
+        self.move_history = []
+        self.selected_pos = None
+        self.legal_moves = []
+        self.game_over = False
+        self.winner = None
+        self.draw_reason = ""
+        self.halfmove_clock = int(parts[4]) if len(parts) > 4 else 0
+        self._halfmove_clock_history = []
+        self.position_history = {}
+
+        # Parse castling rights
+        cr = parts[2] if len(parts) > 2 else "-"
+        self.castling_rights = {
+            Color.WHITE: {"kingside": "K" in cr, "queenside": "Q" in cr},
+            Color.BLACK: {"kingside": "k" in cr, "queenside": "q" in cr},
+        }
+
+        # Fix has_moved flags for kings and rooks based on castling rights
+        self._fix_has_moved_from_fen()
+
+        # Parse en passant target
+        ep_str = parts[3] if len(parts) > 3 else "-"
+        if ep_str != "-":
+            self.en_passant_target = algebraic_to_pos(ep_str)
+        else:
+            self.en_passant_target = None
+
+        # Record initial position for threefold repetition
+        key = self._get_position_key()
+        self.position_history[key] = 1
+
+        # Check for game-over conditions at the start position
+        self._check_game_over()
+
+    def _check_game_over(self) -> None:
+        """Check if the current position is checkmate, stalemate, or draw."""
+        if is_checkmate(self.board, self.current_turn):
+            self.game_over = True
+            self.winner = self.current_turn.opponent()
+            self.draw_reason = ""
+        elif is_stalemate(self.board, self.current_turn):
+            self.game_over = True
+            self.draw_reason = "stalemate"
+        elif is_insufficient_material(self.board):
+            self.game_over = True
+            self.winner = None
+            self.draw_reason = "insufficient material"
+        elif self.halfmove_clock >= 100:
+            self.game_over = True
+            self.winner = None
+            self.draw_reason = "50-move rule"
+
+    def _fix_has_moved_from_fen(self) -> None:
+        """Set has_moved=True on kings/rooks that have lost castling rights."""
+        g = self.board.grid
+        rights = self.castling_rights
+
+        # White king
+        wk = g[7][4]
+        if wk and wk.piece_type == PieceType.KING and wk.color == Color.WHITE:
+            if not (rights[Color.WHITE]["kingside"] or rights[Color.WHITE]["queenside"]):
+                wk.has_moved = True
+
+        # White rooks
+        wr1 = g[7][7]
+        if wr1 and wr1.piece_type == PieceType.ROOK and wr1.color == Color.WHITE:
+            if not rights[Color.WHITE]["kingside"]:
+                wr1.has_moved = True
+        wr2 = g[7][0]
+        if wr2 and wr2.piece_type == PieceType.ROOK and wr2.color == Color.WHITE:
+            if not rights[Color.WHITE]["queenside"]:
+                wr2.has_moved = True
+
+        # Black king
+        bk = g[0][4]
+        if bk and bk.piece_type == PieceType.KING and bk.color == Color.BLACK:
+            if not (rights[Color.BLACK]["kingside"] or rights[Color.BLACK]["queenside"]):
+                bk.has_moved = True
+
+        # Black rooks
+        br1 = g[0][7]
+        if br1 and br1.piece_type == PieceType.ROOK and br1.color == Color.BLACK:
+            if not rights[Color.BLACK]["kingside"]:
+                br1.has_moved = True
+        br2 = g[0][0]
+        if br2 and br2.piece_type == PieceType.ROOK and br2.color == Color.BLACK:
+            if not rights[Color.BLACK]["queenside"]:
+                br2.has_moved = True
 
     def get_legal_moves(self) -> List[Move]:
         """Get all legal moves for the current player."""

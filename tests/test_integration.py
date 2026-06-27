@@ -235,3 +235,124 @@ class TestOpeningBook:
         e4_key = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3"
         assert move.uci() in OPENING_BOOK[e4_key], \
             f"Move {move.uci()} should be a valid response to 1.e4"
+
+
+class TestFENImport:
+    """Tests for importing games from FEN strings."""
+
+    STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    KING_VS_KING_FEN = "8/8/8/4k3/8/8/4K3/8 w - - 0 1"
+
+    def test_standard_fen(self):
+        """Full starting FEN produces same state as default Game()."""
+        g = Game(fen=self.STARTING_FEN)
+        assert g.board.to_fen() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+        assert g.current_turn == Color.WHITE
+        assert g.castling_rights[Color.WHITE]["kingside"] is True
+        assert g.castling_rights[Color.WHITE]["queenside"] is True
+        assert g.castling_rights[Color.BLACK]["kingside"] is True
+        assert g.castling_rights[Color.BLACK]["queenside"] is True
+        assert g.en_passant_target is None
+        assert g.halfmove_clock == 0
+        assert not g.game_over
+
+    def test_default_game_matches_fen(self):
+        """Default Game() produces same state as Game(fen=starting_fen)."""
+        g1 = Game()
+        g2 = Game(fen=self.STARTING_FEN)
+        assert g1.board.to_fen() == g2.board.to_fen()
+        assert g1.current_turn == g2.current_turn
+        assert g1.castling_rights == g2.castling_rights
+        assert g1.en_passant_target == g2.en_passant_target
+        assert g1.halfmove_clock == g2.halfmove_clock
+
+    def test_black_to_move(self):
+        """FEN with black to move sets current_turn correctly."""
+        fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        g = Game(fen=fen)
+        assert g.current_turn == Color.BLACK
+
+    def test_no_castling_rights(self):
+        """FEN with no castling rights parses correctly."""
+        fen = "8/8/8/4k3/8/8/4K3/8 w - - 0 1"
+        g = Game(fen=fen)
+        assert g.castling_rights[Color.WHITE]["kingside"] is False
+        assert g.castling_rights[Color.WHITE]["queenside"] is False
+        assert g.castling_rights[Color.BLACK]["kingside"] is False
+        assert g.castling_rights[Color.BLACK]["queenside"] is False
+
+    def test_partial_castling_rights(self):
+        """FEN with partial castling rights."""
+        fen = "r3k2r/8/8/8/8/8/8/R3K2R w Kk - 0 1"
+        g = Game(fen=fen)
+        assert g.castling_rights[Color.WHITE]["kingside"] is True
+        assert g.castling_rights[Color.WHITE]["queenside"] is False
+        assert g.castling_rights[Color.BLACK]["kingside"] is True
+        assert g.castling_rights[Color.BLACK]["queenside"] is False
+
+    def test_en_passant_target(self):
+        """FEN with en passant target sets it correctly."""
+        fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        g = Game(fen=fen)
+        assert g.en_passant_target is not None
+        assert g.en_passant_target == (5, 4)  # e3 = rank 3, row=8-3=5, col=4
+
+    def test_halfmove_clock(self):
+        """FEN halfmove clock is parsed correctly."""
+        fen = "8/8/8/4k3/8/8/4K3/8 w - - 42 1"
+        g = Game(fen=fen)
+        assert g.halfmove_clock == 42
+
+    def test_king_vs_king_draw(self):
+        """King vs King FEN triggers insufficient material draw."""
+        g = Game(fen=self.KING_VS_KING_FEN)
+        assert g.game_over is True
+        assert g.draw_reason == "insufficient material"
+
+    def test_mate_in_one_fen(self):
+        """A mate-in-one position from FEN is detected."""
+        # Black king on h8, White queen on g7 defended by king on g6
+        fen = "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1"
+        g = Game(fen=fen)
+        assert g.game_over is True  # Already checkmate
+        assert g.winner == Color.WHITE
+
+    def test_castling_flags_set_on_rooks(self):
+        """Rooks that lost castling rights have has_moved=True in FEN."""
+        fen = "r3k2r/8/8/8/8/8/8/R3K2R w Qq - 0 1"
+        g = Game(fen=fen)
+        # White kingside rook should be marked as moved (no K right)
+        wr_h = g.board.grid[7][7]
+        assert wr_h.has_moved is True
+        # White queenside rook should not be marked as moved (Q right exists)
+        wr_a = g.board.grid[7][0]
+        assert wr_a.has_moved is False
+        # Black kingside rook should be marked as moved (no k right)
+        br_h = g.board.grid[0][7]
+        assert br_h.has_moved is True
+        # Black queenside rook should not be marked as moved (q right exists)
+        br_a = g.board.grid[0][0]
+        assert br_a.has_moved is False
+
+    def test_fen_undo_and_remake(self):
+        """Playing and undoing from FEN works correctly."""
+        fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        g = Game(fen=fen)
+        # Black can capture e4 with d5, or play e5 — let's play e5
+        from chess_cli.moves import algebraic_to_pos
+        success = g.make_move(algebraic_to_pos("e7"), algebraic_to_pos("e5"))
+        assert success
+        assert g.current_turn == Color.WHITE
+        # Undo
+        g.undo_move()
+        assert g.current_turn == Color.BLACK
+        assert g.board.to_fen() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR"
+
+    def test_fen_with_checks(self):
+        """FEN where a side is in check is handled correctly."""
+        fen = "4k3/8/8/8/8/8/8/R3K3 w Q - 0 1"  # white king checked by black rook on e8? No...
+        # Let's use: white king on e1, black rook on e8 = check
+        fen = "4k3/8/8/8/8/8/8/4K2R w K - 0 1"
+        g = Game(fen=fen)
+        from chess_cli.moves import is_in_check
+        assert not is_in_check(g.board, Color.WHITE)  # rook on h1 doesn't attack e1

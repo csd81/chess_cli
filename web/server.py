@@ -34,6 +34,10 @@ class NewGameRequest(BaseModel):
     mode: str = "pvp"
 
 
+class FenRequest(BaseModel):
+    fen: str
+
+
 class GameState(BaseModel):
     fen: str
     turn: str
@@ -206,6 +210,18 @@ def new_game(req: NewGameRequest):
     game = Game()
     game_mode = req.mode
     return _build_state()
+
+
+@app.post("/api/load_fen", response_model=GameState)
+def load_fen(req: FenRequest):
+    """Load a game from a FEN string."""
+    global game, game_mode
+    try:
+        game = Game(fen=req.fen)
+        game_mode = "pvp"  # Reset to PvP for FEN puzzles
+        return _build_state()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid FEN: {e}")
 
 
 # Serve static files

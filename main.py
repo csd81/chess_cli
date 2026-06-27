@@ -14,6 +14,8 @@ def main() -> None:
                         help="Web server host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000,
                         help="Web server port (default: 8000)")
+    parser.add_argument("--fen", type=str, default=None,
+                        help="Start from a FEN position (e.g. \\"8/8/8/4k3/8/8/4K3/8 w - - 0 1\\")")
     args = parser.parse_args()
 
     if args.tui:
@@ -32,7 +34,7 @@ def main() -> None:
             sys.exit(1)
     else:
         from chess_cli.cli import main as cli_main
-        cli_main()
+        cli_main(fen=args.fen)
 
 
 if __name__ == "__main__":
