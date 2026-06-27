@@ -2,6 +2,7 @@
 and transposition tables (Zobrist hashing)."""
 
 import random
+import time
 from typing import Optional, List, Tuple, NamedTuple
 from dataclasses import dataclass
 from chess_cli.pieces import Piece, Color, PieceType
@@ -29,6 +30,23 @@ class TTEntry:
     score: int
     depth: int
     flag: int
+
+
+class TimeOutException(Exception):
+    """Raised when the AI exceeds its allotted thinking time."""
+    pass
+
+
+_node_count = 0
+NODE_CHECK_INTERVAL = 1024
+
+
+def _check_timeout(end_time):
+    global _node_count
+    _node_count += 1
+    if _node_count & (NODE_CHECK_INTERVAL - 1) == 0:
+        if time.time() > end_time:
+            raise TimeOutException()
 
 
 # Global transposition table
@@ -241,13 +259,17 @@ QS_MAX_DEPTH = 8  # Safety limit to prevent runaway recursion
 
 def _quiescence_search(grid, alpha, beta, is_maximizing,
                        ai_color, en_passant_target, current_turn,
-                       zobrist_hash, castling, qs_depth=0):
+                       zobrist_hash, castling, qs_depth=0,
+                       end_time=0):
     """Search only capture moves until the position is quiet.
 
     Eliminates the horizon effect by ensuring tactical sequences
     (captures) are fully resolved before static evaluation.
     Uses MVV-LVA (Most Valuable Victim - Least Valuable Attacker) ordering.
     """
+    if end_time:
+        _check_timeout(end_time)
+
     # Safety depth limit
     if qs_depth >= QS_MAX_DEPTH:
         temp_board = Board.__new__(Board)
@@ -305,7 +327,7 @@ def _quiescence_search(grid, alpha, beta, is_maximizing,
             nt = current_turn.opponent()
             score = _quiescence_search(ng, alpha, beta, False,
                                       ai_color, nep, nt, nh, ncast,
-                                      qs_depth + 1)
+                                      qs_depth + 1, end_time)
             if score >= beta:
                 return beta
             if score > alpha:
@@ -324,7 +346,7 @@ def _quiescence_search(grid, alpha, beta, is_maximizing,
             nt = current_turn.opponent()
             score = _quiescence_search(ng, alpha, beta, True,
                                       ai_color, nep, nt, nh, ncast,
-                                      qs_depth + 1)
+                                      qs_depth + 1, end_time)
             if score <= alpha:
                 return alpha
             if score < beta:
@@ -332,10 +354,27 @@ def _quiescence_search(grid, alpha, beta, is_maximizing,
         return beta
 
 
+def _has_non_pawn_material(grid, color):
+    """Returns True if the player has pieces other than Pawns and Kings."""
+    for r in range(8):
+        for c in range(8):
+            p = grid[r][c]
+            if p and p.color == color and p.piece_type not in (PieceType.PAWN, PieceType.KING):
+                return True
+    return False
+
+
+R = 2  # Null move pruning reduction factor
+
+
 def _minimax(grid, depth, alpha, beta, is_maximizing,
              ai_color, en_passant_target, current_turn,
-             zobrist_hash, castling):
+             zobrist_hash, castling,
+             end_time=0):
     """Minimax search on a raw grid with alpha-beta and transposition table."""
+    if end_time:
+        _check_timeout(end_time)
+
     temp_board = Board.__new__(Board)
     temp_board.grid = grid
 
@@ -362,7 +401,28 @@ def _minimax(grid, depth, alpha, beta, is_maximizing,
     if depth == 0:
         return _quiescence_search(grid, alpha, beta, is_maximizing,
                                   ai_color, en_passant_target, current_turn,
-                                  zobrist_hash, castling)
+                                  zobrist_hash, castling, end_time=end_time)
+
+    # Null Move Pruning
+    if depth >= 3 and not is_in_check(temp_board, current_turn) and _has_non_pawn_material(grid, current_turn):
+        # Flip side to move in hash
+        null_hash = zobrist_hash ^ SIDE_KEY
+        # Clear en passant target
+        if en_passant_target is not None:
+            null_hash ^= EN_PASSANT_KEYS[en_passant_target[1]]
+            null_hash ^= EN_PASSANT_KEYS[8]  # index 8 = no ep
+        null_grid = [row[:] for row in grid]
+        nt = current_turn.opponent()
+        if is_maximizing:
+            null_score = _minimax(null_grid, depth - 1 - R, alpha, beta, False,
+                                  ai_color, None, nt, null_hash, castling, end_time)
+            if null_score >= beta:
+                return beta
+        else:
+            null_score = _minimax(null_grid, depth - 1 - R, alpha, beta, True,
+                                  ai_color, None, nt, null_hash, castling, end_time)
+            if null_score <= alpha:
+                return alpha
 
     legal = generate_legal_moves(temp_board, current_turn,
                                  en_passant_target=en_passant_target)
@@ -378,7 +438,7 @@ def _minimax(grid, depth, alpha, beta, is_maximizing,
                 temp_board, move, en_passant_target, zobrist_hash, castling)
             nt = current_turn.opponent()
             score = _minimax(ng, depth - 1, alpha, beta, False,
-                            ai_color, nep, nt, nh, ncast)
+                            ai_color, nep, nt, nh, ncast, end_time)
             if score > best:
                 best = score
             if score > alpha:
@@ -392,7 +452,7 @@ def _minimax(grid, depth, alpha, beta, is_maximizing,
                 temp_board, move, en_passant_target, zobrist_hash, castling)
             nt = current_turn.opponent()
             score = _minimax(ng, depth - 1, alpha, beta, True,
-                            ai_color, nep, nt, nh, ncast)
+                            ai_color, nep, nt, nh, ncast, end_time)
             if score < best:
                 best = score
             if score < beta:
@@ -413,8 +473,19 @@ def _minimax(grid, depth, alpha, beta, is_maximizing,
 
 def get_best_move(board: Board, current_turn: Color,
                   en_passant_target=None,
-                  depth: int = 3):
-    """Find the best move using minimax + alpha-beta + transposition table."""
+                  depth: int = 3,
+                  time_limit: Optional[float] = None):
+    """Find the best move using minimax + alpha-beta + transposition table.
+
+    Args:
+        board: Current board state.
+        current_turn: Who is to move.
+        en_passant_target: Current en passant target square, if any.
+        depth: Fixed search depth (used when time_limit is None, default 3).
+        time_limit: If set, use iterative deepening up to this many seconds.
+                    Overrides depth.
+    """
+    global _node_count
     legal = generate_legal_moves(board, current_turn,
                                  en_passant_target=en_passant_target)
     if not legal:
@@ -435,40 +506,86 @@ def get_best_move(board: Board, current_turn: Color,
     zobrist_hash = compute_zobrist_hash(
         board.grid, current_turn, en_passant_target, castling)
 
-    # Depth 1: pick the move with best immediate evaluation
-    if depth <= 1:
+    # Mode A: Fixed depth (original behavior, used in tests)
+    if time_limit is None:
+        if depth <= 1:
+            best_move = None
+            best_score = -999999
+            for move in legal:
+                ng, _, _, _ = simulate_move(
+                    board, move, en_passant_target, zobrist_hash, castling)
+                tb = Board.__new__(Board)
+                tb.grid = ng
+                score = evaluate(tb, current_turn)
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+            return best_move
+
         best_move = None
         best_score = -999999
+        ai_color = current_turn
+
+        def move_key(m):
+            if m.captured:
+                return -PIECE_VALUES.get(m.captured.piece_type, 0)
+            return 0
+        legal.sort(key=move_key)
+
         for move in legal:
-            ng, _, _, _ = simulate_move(
+            ng, nep, nh, ncast = simulate_move(
                 board, move, en_passant_target, zobrist_hash, castling)
-            tb = Board.__new__(Board)
-            tb.grid = ng
-            score = evaluate(tb, current_turn)
+            nt = current_turn.opponent()
+            score = _minimax(ng, depth - 1, -999999, 999999, False,
+                            ai_color, nep, nt, nh, ncast)
             if score > best_score:
                 best_score = score
                 best_move = move
         return best_move
 
-    best_move = None
-    best_score = -999999
+    # Mode B: Iterative deepening with time limit
+    end_time = time.time() + time_limit
+    best_move_overall = legal[0]
     ai_color = current_turn
 
-    # Order moves: captures first (on higher-value pieces first)
     def move_key(m):
         if m.captured:
             return -PIECE_VALUES.get(m.captured.piece_type, 0)
         return 0
-    legal.sort(key=move_key)
 
-    for move in legal:
-        ng, nep, nh, ncast = simulate_move(
-            board, move, en_passant_target, zobrist_hash, castling)
-        nt = current_turn.opponent()
-        score = _minimax(ng, depth - 1, -999999, 999999, False,
-                        ai_color, nep, nt, nh, ncast)
-        if score > best_score:
-            best_score = score
-            best_move = move
+    for current_depth in range(1, 100):
+        try:
+            _node_count = 0
 
-    return best_move
+            legal.sort(key=move_key)
+            if best_move_overall in legal:
+                legal.remove(best_move_overall)
+                legal.insert(0, best_move_overall)
+
+            best_score = -999999
+            current_best = legal[0]
+
+            for move in legal:
+                if time.time() > end_time:
+                    raise TimeOutException()
+
+                ng, nep, nh, ncast = simulate_move(
+                    board, move, en_passant_target, zobrist_hash, castling)
+                nt = current_turn.opponent()
+                score = _minimax(ng, current_depth - 1, -999999, 999999,
+                                False, ai_color, nep, nt, nh, ncast,
+                                end_time)
+
+                if score > best_score:
+                    best_score = score
+                    current_best = move
+
+            best_move_overall = current_best
+
+            if best_score > 90000:
+                break
+
+        except TimeOutException:
+            break
+
+    return best_move_overall

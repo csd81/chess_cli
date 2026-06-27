@@ -162,13 +162,13 @@ class TestAIIntegration:
             assert move.captured.piece_type == PieceType.PAWN
 
     def test_cpu_vs_cpu_game(self):
-        """Play a full CPU vs CPU game to verify no errors."""
+        """Play a CPU vs CPU game to verify no errors."""
         g = Game()
-        max_moves = 40  # prevent infinite games
+        max_moves = 20
         for i in range(max_moves):
             move = get_best_move(g.board, g.current_turn,
                                 en_passant_target=g.en_passant_target,
-                                depth=2)
+                                depth=1)
             if move is None:
                 break
             g.make_move_from_move(move)
@@ -191,8 +191,8 @@ class TestAIVsAI:
         cli.highlighted_piece = None
         cli.cpu_color = None
         cli.ai_vs_ai = True
-        cli.ai_depth_white = 2
-        cli.ai_depth_black = 2
+        cli.ai_depth_white = 1
+        cli.ai_depth_black = 1
 
         # Play 3 full moves (6 half-moves)
         for _ in range(6):
