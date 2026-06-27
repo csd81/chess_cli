@@ -16,9 +16,14 @@ def main() -> None:
                         help="Web server port (default: 8000)")
     parser.add_argument("--fen", type=str, default=None,
                         help="Start from a FEN position (e.g. \\"8/8/8/4k3/8/8/4K3/8 w - - 0 1\\")")
+    parser.add_argument("--uci", action="store_true",
+                        help="Launch UCI protocol mode (for chess GUIs)")
     args = parser.parse_args()
 
-    if args.tui:
+    if args.uci:
+        from chess_cli.uci import uci_loop
+        uci_loop()
+    elif args.tui:
         try:
             from chess_cli.tui import run_tui
             run_tui()

@@ -147,6 +147,31 @@ class Game:
                 return True
         return False
 
+    def make_move_from_uci(self, uci_str: str) -> bool:
+        """Execute a move from a UCI string (e.g. 'e2e4', 'e7e8q').
+
+        Returns True if successful.
+        """
+        if len(uci_str) < 4:
+            return False
+        from_pos = algebraic_to_pos(uci_str[:2])
+        to_pos = algebraic_to_pos(uci_str[2:4])
+        if from_pos is None or to_pos is None:
+            return False
+
+        promo_letter = uci_str[4] if len(uci_str) >= 5 else None
+        promo_map = {"q": PieceType.QUEEN, "r": PieceType.ROOK,
+                     "b": PieceType.BISHOP, "n": PieceType.KNIGHT}
+        promo_pt = promo_map.get(promo_letter) if promo_letter else None
+
+        legal = self.get_legal_moves()
+        for move in legal:
+            if (move.from_pos == from_pos and move.to_pos == to_pos
+                    and move.promotion == promo_pt):
+                self._execute_move(move)
+                return True
+        return False
+
     def make_move_from_move(self, move: Move) -> None:
         """Execute a pre-validated Move object directly (used by AI)."""
         self._execute_move(move)
